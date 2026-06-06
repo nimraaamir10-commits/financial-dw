@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: acme_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: acme
+      MONGO_INITDB_ROOT_PASSWORD: acme_secret
+      MONGO_INITDB_DATABASE: financial_dw
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - acme_net
+
+  api:
+    build: .
+    container_name: acme_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://acme:acme_secret@mongodb:27017/financial_dw?authSource=admin
+      - MONGO_DB=financial_dw
+    depends_on:
+      - mongodb
+    networks:
+      - acme_net
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  mcp_server:
+    build: .
+    container_name: acme_mcp
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URI=mongodb://acme:acme_secret@mongodb:27017/financial_dw?authSource=admin
+      - MONGO_DB=financial_dw
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      - mongodb
+      - api
+    networks:
+      - acme_net
+    command: python -m mcp_server.server
+
+volumes:
+  mongo_data:
+
+networks:
+  acme_net:
+    driver: bridge
